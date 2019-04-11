@@ -41,9 +41,39 @@ typedef enum
 
 static bool manage_http_request(int sockfd)
 {
-
+    // try to read the request
+    char buff[2049];
+    int n = read(sockfd, buff, 2049);
+    if (n <= 0)
+    {
+        if (n < 0)
+            perror("read");
+        else
+            printf("socket %d close the connection\n", sockfd);
+        return false;
+    }
 }
 int main(int argc, char * argv[])
-{
+{ 
+    if (argc < 3)
+    {
+        fprintf(stderr, "usage: %s ip port\n", argv[0]);
+        return 0;
+    }
 
+    // create TCP socket which only accept IPv4
+    int sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sockfd < 0)
+    {
+        perror("socket");
+        exit(EXIT_FAILURE);
+    }
+
+    // reuse the socket if possible
+    int const reuse = 1;
+    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(int)) < 0)
+    {
+        perror("setsockopt");
+        exit(EXIT_FAILURE);
+    }
 }
