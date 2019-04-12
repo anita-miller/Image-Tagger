@@ -105,6 +105,50 @@ int main(int argc, char * argv[])
 
     while (1)
     {
+        // monitor file descriptors
+        fd_set readfds = masterfds;
+        if (select(FD_SETSIZE, &readfds, NULL, NULL, NULL) < 0)
+        {
+            perror("select");
+            exit(EXIT_FAILURE);
+        }
 
+        // loop all possible descriptor
+        for (int i = 0; i <= maxfd; ++i)
+            // determine if the current file descriptor is active
+            if (FD_ISSET(i, &readfds))
+            {
+                // create new socket if there is new incoming connection request
+                if (i == sockfd)
+                {
+                    struct sockaddr_in cliaddr;
+                    socklen_t clilen = sizeof(cliaddr);
+                    int newsockfd = accept(sockfd, (struct sockaddr *)&cliaddr, &clilen);
+                    if (newsockfd < 0)
+                        perror("accept");
+                    else
+                    {
+                        // add the socket to the set
+                        FD_SET(newsockfd, &masterfds);
+                        // update the maximum tracker
+                        if (newsockfd > maxfd)
+                            maxfd = newsockfd;
+                        // print out the IP and the socket number
+                        char ip[INET_ADDRSTRLEN];
+                        printf(
+                            "new connection from %s on socket %d\n",
+                            // convert to human readable string
+                            inet_ntop(cliaddr.sin_family, &cliaddr.sin_addr, ip, INET_ADDRSTRLEN),
+                            newsockfd
+                        );
+                    }
+                }
+                // a request is sent from the client
+                else if (!handle_http_request(i))
+                {
+                    close(i);
+                    FD_CLR(i, &masterfds);
+                }
+            }
     }
 }
