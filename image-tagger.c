@@ -76,4 +76,13 @@ int main(int argc, char * argv[])
         perror("setsockopt");
         exit(EXIT_FAILURE);
     }
+
+    // create and initialise address we will listen on
+    struct sockaddr_in serv_addr;
+    bzero(&serv_addr, sizeof(serv_addr));
+    serv_addr.sin_family = AF_INET;
+    // if ip parameter is not specified
+    serv_addr.sin_addr.s_addr = inet_addr(argv[1]);
+    serv_addr.sin_port = htons(atoi(argv[2]));
+
 }
