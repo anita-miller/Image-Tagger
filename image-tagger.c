@@ -53,6 +53,7 @@ static bool manage_http_request(int sockfd)
         return false;
     }
 }
+
 int main(int argc, char * argv[])
 { 
     if (argc < 3)
@@ -85,4 +86,25 @@ int main(int argc, char * argv[])
     serv_addr.sin_addr.s_addr = inet_addr(argv[1]);
     serv_addr.sin_port = htons(atoi(argv[2]));
 
+    // bind address to socket
+    if (bind(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
+    {
+        perror("bind");
+        exit(EXIT_FAILURE);
+    }
+
+    // listen on the socket
+    listen(sockfd, 5);
+
+    // initialise an active file descriptors set
+    fd_set masterfds;
+    FD_ZERO(&masterfds);
+    FD_SET(sockfd, &masterfds);
+    // record the maximum socket number
+    int maxfd = sockfd;
+
+    while (1)
+    {
+
+    }
 }
