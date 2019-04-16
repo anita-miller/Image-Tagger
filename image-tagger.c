@@ -38,6 +38,17 @@ typedef enum
     UNKNOWN
 } METHOD;
 
+typedef enum
+{
+    INTRO,
+    START,
+    FIRST,
+    ACCEPTED,
+    DISCARDED,
+    ENDGAME,
+    GAMEOVER,
+    UNKNOWN
+} Page;
 
 static bool manage_http_request(int sockfd)
 {
@@ -76,6 +87,51 @@ static bool manage_http_request(int sockfd)
         perror("write");
         return false;
     }
+
+    //parse the url
+    Page page = UNKNOWN;
+    if (strncmp(curr, "/html/1_intro.html ", 19) == 0)
+    {
+        curr += 19;
+        page = INTRO;
+    }
+    else if (strncmp(curr, "/html/2_start.html ", 19) == 0)
+    {
+        curr += 19;
+        page = START;
+    }
+    else if (strncmp(curr, "/html/3_first_turn.html ", 24) == 0)
+    {
+        curr += 24;
+        page = FIRST;
+    }
+    else if (strncmp(curr, "/html/4_accepted.html ", 22) == 0)
+    {
+        curr += 22;
+        page = ACCEPTED;
+    }
+    else if (strncmp(curr, "/html/5_discarded.html ", 23) == 0)
+    {
+        curr += 23;
+        page = DISCARDED;
+    }
+    else if (strncmp(curr, "/html/6_endgame.html ", 21) == 0)
+    {
+        curr += 21;
+        page = ENDGAME;
+    }
+    else if (strncmp(curr, "/html/7_gameover.html ", 22) == 0)
+    {
+        curr += 22;
+        page = GAMEOVER;
+    }
+    else if (write(sockfd, HTTP_400, HTTP_400_LENGTH) < 0)
+    {
+        perror("write");
+        return false;
+    }
+
+    
 
     // sanitise the URI
     while (*curr == '.' || *curr == '/')
@@ -121,7 +177,7 @@ static bool manage_http_request(int sockfd)
 
             // get the size of the file
             struct stat st;
-            stat("html/1_intro.html", &st);
+            stat("html/2_start.html", &st);
             // increase file size to accommodate the username
             long size = st.st_size + added_length;
             n = sprintf(buff, HTTP_200_FORMAT, size);
@@ -132,7 +188,7 @@ static bool manage_http_request(int sockfd)
                 return false;
             }
             // read the content of the HTML file
-            int filefd = open("html/1_intro.html", O_RDONLY);
+            int filefd = open("html/2_start.html", O_RDONLY);
             n = read(filefd, buff, 2048);
             if (n < 0)
             {
@@ -183,7 +239,7 @@ int main(int argc, char * argv[])
     int sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (sockfd < 0)
     {
-        perror("socket");
+        perror("Could not create sockeet");
         exit(EXIT_FAILURE);
     }
 
@@ -268,4 +324,6 @@ int main(int argc, char * argv[])
                 }
             }
     }
+    return 0;
 }
+
