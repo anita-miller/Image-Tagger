@@ -27,8 +27,6 @@ Content-Type: text/html\r\n\
 Content-Length: %ld\r\n\r\n";
 static char const * const HTTP_400 = "HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n";
 static int const HTTP_400_LENGTH = 47;
-static char const * const HTTP_404 = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n";
-static int const HTTP_404_LENGTH = 45;
 
 // represents the types of method
 typedef enum
@@ -45,7 +43,7 @@ typedef enum
     FIRST,
     ACCEPTED,
     DISCARDED,
-    ENDGAME,
+    QUIT,
     GAMEOVER,
     NOTDEFINED,
     EMPTY
@@ -97,10 +95,13 @@ static bool manage_http_request(int sockfd)
     {
         page = ACCEPTED;
     }
-    else if (strstr(temp, "/?start=Start ") != NULL)
+    else if (strstr(temp, "/?start=Start ") != NULL && strstr(temp, "quit=Quit") == NULL)
     {
-
         page = START;
+    }
+    else if (strstr(temp, "quit=Quit") != NULL)
+    {
+        page = QUIT;
     }
     else if (strstr(temp, "user=") != NULL && strstr(temp, "/?start=Start ") == NULL)
     {     
@@ -240,6 +241,32 @@ static bool manage_http_request(int sockfd)
             }
             // send the file
             int filefd = open("html/4_accepted.html", O_RDONLY);
+            do
+            {
+                n = sendfile(sockfd, filefd, NULL, 2048);
+            } while (n > 0);
+            if (n < 0)
+            {
+                perror("sendfile");
+                close(filefd);
+                return false;
+            }
+            close(filefd);
+        }
+        else if (page == QUIT)
+        {
+            // get the size of the file
+            struct stat st;
+            stat("html/7_gameover.html", &st);
+            n = sprintf(buff, HTTP_200_FORMAT, st.st_size);
+            // send the header first
+            if (write(sockfd, buff, n) < 0)
+            {
+                perror("write");
+                return false;
+            }
+            // send the file
+            int filefd = open("html/7_gameover.html", O_RDONLY);
             do
             {
                 n = sendfile(sockfd, filefd, NULL, 2048);
