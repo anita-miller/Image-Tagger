@@ -95,7 +95,7 @@ static bool manage_http_request(int sockfd)
     Page page = EMPTY;
     if (strstr(temp, "guess=") !=NULL)
     {
-        page = FIRST;
+        page = ACCEPTED;
     }
     else if (strstr(temp, "/?start=Start ") != NULL)
     {
@@ -214,6 +214,32 @@ static bool manage_http_request(int sockfd)
             }
             // send the file
             int filefd = open("html/3_first_turn.html", O_RDONLY);
+            do
+            {
+                n = sendfile(sockfd, filefd, NULL, 2048);
+            } while (n > 0);
+            if (n < 0)
+            {
+                perror("sendfile");
+                close(filefd);
+                return false;
+            }
+            close(filefd);
+        }
+        else if (page == ACCEPTED)
+        {
+            // get the size of the file
+            struct stat st;
+            stat("html/4_accepted.html", &st);
+            n = sprintf(buff, HTTP_200_FORMAT, st.st_size);
+            // send the header first
+            if (write(sockfd, buff, n) < 0)
+            {
+                perror("write");
+                return false;
+            }
+            // send the file
+            int filefd = open("html/4_accepted.html", O_RDONLY);
             do
             {
                 n = sendfile(sockfd, filefd, NULL, 2048);
