@@ -112,7 +112,7 @@ static bool manage_http_request(int sockfd)
         page = INTRO;
     }
 
-    printf("%s", temp);
+    //printf("%s", temp);
     // sanitise the URI
     while (*curr == '.' || *curr == '/')
         ++curr;
@@ -178,9 +178,13 @@ static bool manage_http_request(int sockfd)
         if (page == FIRST)
         {
             // locate the username
-            char *username = strstr(buff, "user=");
+            char *username = strstr(buff, "user=")+5;
             int username_length = strlen(username);
-            
+            char str[80];
+            sprintf(str, "<div>%s</div>", username);
+
+            long added_length = username_length + 11;
+
             // get the size of the file
             struct stat st;
             stat("html/2_start.html", &st);
@@ -204,18 +208,19 @@ static bool manage_http_request(int sockfd)
             }
             close(filefd);
 
-            char *ret;
-            const char B[200] = "<form method=\"GET\">< input type = \"submit\" class= \"button\" name = \"start\" value = \"Start\" / ></ form><form method = \"POST\"><input type = \"submit\" class = \"button\" name = \"quit\" value = \"Quit\" /></ form></ body></ html>";
-            ret = strstr(buff, B);
-            strncpy(buff, buff, size - strlen(ret));
-            strcat(buff, username);
-            strcat(buff, B);
-
+            // move the trailing part backward
+            int p1, p2;
+            for (p1 = size - 1, p2 = p1 - added_length; p1 >= size - 197; --p1, --p2)
+                buff[p1] = buff[p2];
+            ++p2;
+            // copy the username
+            strncpy(buff + p2, str, added_length);
             if (write(sockfd, buff, size) < 0)
             {
                 perror("write");
                 return false;
             }
+            printf("%s", buff);
         }
         else if (page == START)
         {
