@@ -111,7 +111,7 @@ static bool manage_http_request(int sockfd)
     {
         page = INTRO;
     }
-    
+
     printf("%s", temp);
     // sanitise the URI
     while (*curr == '.' || *curr == '/')
@@ -178,13 +178,13 @@ static bool manage_http_request(int sockfd)
         if (page == FIRST)
         {
             // locate the username
-            char *username = strstr(buff, "user=") + 5;
+            char *username = strstr(buff, "user=");
             int username_length = strlen(username);
             
             // get the size of the file
             struct stat st;
             stat("html/2_start.html", &st);
-            long size = st.st_size + username_length;
+            long size = st.st_size;
             n = sprintf(buff, HTTP_200_FORMAT, st.st_size);
             // send the header first
             if (write(sockfd, buff, n) < 0)
@@ -204,16 +204,13 @@ static bool manage_http_request(int sockfd)
             }
             close(filefd);
 
-            // move the trailing part backward
-            int p1 = size - 1, p2;
-            for (p1 = size - 1, p2 = p1 - username_length; p1 >= size - 25; --p1, --p2)
-                buff[p1] = buff[p2];
-            ++p2;
-            // put the separator
-            buff[p2++] = ',';
-            buff[p2++] = ' ';
-            // copy the username
-            strncpy(buff + p2, username, username_length);
+            char *ret;
+            const char B[200] = "<form method=\"GET\">< input type = \"submit\" class= \"button\" name = \"start\" value = \"Start\" / ></ form><form method = \"POST\"><input type = \"submit\" class = \"button\" name = \"quit\" value = \"Quit\" /></ form></ body></ html>";
+            ret = strstr(buff, B);
+            strncpy(buff, buff, size - strlen(ret));
+            strcat(buff, username);
+            strcat(buff, B);
+
             if (write(sockfd, buff, size) < 0)
             {
                 perror("write");
