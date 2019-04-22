@@ -49,9 +49,26 @@ typedef enum
     EMPTY
 } Page;
 
-
-
-static bool manage_http_request(int sockfd)
+void removeSubstring(char *s, const char *toremove)
+{
+    while(s = strstr(s, toremove))
+        memmove(s, s + strlen(toremove), 1 + strlen(s + strlen(toremove)));
+}
+void parseMethod(char *curr, METHOD method)
+{
+    // parse the method
+    if (strncmp(curr, "GET ", 4) == 0)
+    {
+        curr += 4;
+        method = GET;
+    }
+    else if (strncmp(curr, "POST ", 5) == 0)
+    {
+        curr += 5;
+        method = POST;
+    }
+}
+static bool manage_http_request(int sockfd, char* guesses)
 {
     // try to read the request
     char buff[2049];
@@ -68,26 +85,12 @@ static bool manage_http_request(int sockfd)
 
     // terminate the string
     buff[n] = 0;
-
-    char * curr = buff;
-
+    
     // parse the method
+    char * curr = buff;
     METHOD method = UNKNOWN;
-    if (strncmp(curr, "GET ", 4) == 0)
-    {
-        curr += 4;
-        method = GET;
-    }
-    else if (strncmp(curr, "POST ", 5) == 0)
-    {
-        curr += 5;
-        method = POST;
-    }
-    else if (write(sockfd, HTTP_400, HTTP_400_LENGTH) < 0)
-    {
-        perror("write");
-        return false;
-    }
+
+    parseMethod(curr, method);
 
     char *temp = buff;
     Page page = EMPTY;
@@ -95,7 +98,7 @@ static bool manage_http_request(int sockfd)
     {
         page = ACCEPTED;
     }
-    else if (strstr(temp, "/?start=Start ") != NULL && strstr(temp, "quit=Quit") == NULL)
+    else if (strstr(temp, "?start=Start") != NULL && strstr(temp, "quit=Quit") == NULL)
     {
         page = START;
     }
@@ -103,7 +106,7 @@ static bool manage_http_request(int sockfd)
     {
         page = QUIT;
     }
-    else if (strstr(temp, "user=") != NULL && strstr(temp, "/?start=Start ") == NULL)
+    else if (strstr(temp, "user=") != NULL && strstr(temp, "?start=Start") == NULL)
     {     
         page = FIRST;
     }
@@ -112,7 +115,7 @@ static bool manage_http_request(int sockfd)
         page = INTRO;
     }
 
-    //printf("%s", temp);
+    printf("%s", temp);
     // sanitise the URI
     while (*curr == '.' || *curr == '/')
         ++curr;
@@ -170,6 +173,7 @@ static bool manage_http_request(int sockfd)
                 return false;
             }
             close(filefd);
+            printf("%s", buff);
         }
     }
         
@@ -180,8 +184,8 @@ static bool manage_http_request(int sockfd)
             // locate the username
             char *username = strstr(buff, "user=")+5;
             int username_length = strlen(username);
-            char str[80];
-            sprintf(str, "<div>%s</div>", username);
+            char *str = malloc(sizeof(char) * 2049);
+            sprintf(str, "<div>%s</div><form method=\"GET\"><input type=\"submit\" class=\"button\" name=\"start\"  value=\"Start\"/></form><form method=\" POST \"><input type=\"submit\" class=\"button\" name=\"quit\" value=\"Quit\"/></form></body></html>", username);
 
             long added_length = username_length + 11;
 
@@ -207,52 +211,32 @@ static bool manage_http_request(int sockfd)
                 return false;
             }
             close(filefd);
+            
+            sprintf(buff, "<!DOCTYPE html><html><head></head><body><h2>Image Tagger Game</h2><img src=\"https://swift.rc.nectar.org.au/v1/AUTH_eab314456b624071ac5aecd721b977f0/comp30023-project/image-3.jpg\" alt=\"HTML5 Icon\" style=\"width:700px;height:400px;\">%s", str);
 
-            // move the trailing part backward
-            int p1, p2;
-            for (p1 = size - 1, p2 = p1 - added_length; p1 >= size - 197; --p1, --p2)
-                buff[p1] = buff[p2];
-            ++p2;
-            // copy the username
-            strncpy(buff + p2, str, added_length);
-            if (write(sockfd, buff, size) < 0)
+            if (write(sockfd, buff, sizeof(buff)) < 0)
             {
                 perror("write");
                 return false;
             }
             printf("%s", buff);
         }
-        else if (page == START)
-        {
-            // get the size of the file
-            struct stat st;
-            stat("html/3_first_turn.html", &st);
-            n = sprintf(buff, HTTP_200_FORMAT, st.st_size);
-            // send the header first
-            if (write(sockfd, buff, n) < 0)
-            {
-                perror("write");
-                return false;
-            }
-            // send the file
-            int filefd = open("html/3_first_turn.html", O_RDONLY);
-            do
-            {
-                n = sendfile(sockfd, filefd, NULL, 2048);
-            } while (n > 0);
-            if (n < 0)
-            {
-                perror("sendfile");
-                close(filefd);
-                return false;
-            }
-            close(filefd);
-        }
         else if (page == ACCEPTED)
         {
-            // get the size of the file
+
+            char *guess = strstr(buff, "keyword=") + 8;
+            char *comma = ", ";
+
+            strcat(guesses, guess);
+            strcat(guesses, comma);
+            removeSubstring(guesses, "&guess=Guess");
+
+            char *str = malloc(sizeof(char) * 2049);
+            sprintf(str, "\n<div>%s</div>\n", guesses);
+
             struct stat st;
             stat("html/4_accepted.html", &st);
+            long size = st.st_size;
             n = sprintf(buff, HTTP_200_FORMAT, st.st_size);
             // send the header first
             if (write(sockfd, buff, n) < 0)
@@ -262,17 +246,34 @@ static bool manage_http_request(int sockfd)
             }
             // send the file
             int filefd = open("html/4_accepted.html", O_RDONLY);
-            do
-            {
-                n = sendfile(sockfd, filefd, NULL, 2048);
-            } while (n > 0);
+            n = read(filefd, buff, 2048);
             if (n < 0)
             {
-                perror("sendfile");
+                perror("read");
                 close(filefd);
                 return false;
             }
             close(filefd);
+
+            char tempbuff[2049];
+            memcpy(tempbuff, buff, 256);
+            tempbuff[256] = '\0';
+            
+            strcat(tempbuff, str);
+
+            char *rest = strstr(buff, "<form");
+            printf("%s", rest);
+            strcat(tempbuff, rest);
+            strcpy(buff, tempbuff);
+
+            
+            if (write(sockfd, buff,8000) < 0)
+            {
+                perror("The following error occurred");
+                return false;
+            }
+             
+            
         }
         else if (page == QUIT)
         {
@@ -360,7 +361,8 @@ int main(int argc, char * argv[])
     FD_SET(sockfd, &masterfds);
     // record the maximum socket number
     int maxfd = sockfd;
-
+    char *guesses = malloc(sizeof(char) * 1000);
+    bool flag =false;
     while (1)
     {
         // monitor file descriptors
@@ -401,8 +403,9 @@ int main(int argc, char * argv[])
                         );
                     }
                 }
+                
                 // a request is sent from the client
-                else if (!manage_http_request(i))
+                else if (!manage_http_request(i, guesses))
                 {
                     close(i);
                     FD_CLR(i, &masterfds);
