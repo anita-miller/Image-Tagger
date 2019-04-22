@@ -68,7 +68,57 @@ void parseMethod(char *curr, METHOD method)
         method = POST;
     }
 }
-static bool manage_http_request(int sockfd, char* guesses)
+void parseCorrectHtml(char *temp, Page page)
+{
+    if (strstr(temp, "guess=") != NULL)
+    {
+        page = ACCEPTED;
+    }
+    else if (strstr(temp, "?start=Start") != NULL && strstr(temp, "quit=Quit") == NULL)
+    {
+        page = START;
+    }
+    else if (strstr(temp, "quit=Quit") != NULL)
+    {
+        page = QUIT;
+    }
+    else if (strstr(temp, "user=") != NULL && strstr(temp, "?start=Start") == NULL)
+    {
+        page = FIRST;
+    }
+    else
+    {
+        page = INTRO;
+    }
+}
+void loadHtml(int sockfd, char buff, const char *pathname)
+{
+    // get the size of the file
+    struct stat st;
+    stat(pathname, &st);
+    n = sprintf(buff, HTTP_200_FORMAT, st.st_size);
+    // send the header first
+    if (write(sockfd, buff, n) < 0)
+    {
+        perror("write");
+        return false;
+    }
+    // send the file
+    int filefd = open(pathname, O_RDONLY);
+    do
+    {
+        n = sendfile(sockfd, filefd, NULL, 2048);
+    } while (n > 0);
+    if (n < 0)
+    {
+        perror("sendfile");
+        close(filefd);
+        return false;
+    }
+    close(filefd);
+}
+
+static bool manage_http_request(int sockfd, char *guesses)
 {
     // try to read the request
     char buff[2049];
@@ -82,38 +132,19 @@ static bool manage_http_request(int sockfd, char* guesses)
         return false;
     }
 
-
     // terminate the string
     buff[n] = 0;
-    
+
     // parse the method
     char * curr = buff;
     METHOD method = UNKNOWN;
-
     parseMethod(curr, method);
 
+    //parse which html we need to load
     char *temp = buff;
     Page page = EMPTY;
-    if (strstr(temp, "guess=") !=NULL)
-    {
-        page = ACCEPTED;
-    }
-    else if (strstr(temp, "?start=Start") != NULL && strstr(temp, "quit=Quit") == NULL)
-    {
-        page = START;
-    }
-    else if (strstr(temp, "quit=Quit") != NULL)
-    {
-        page = QUIT;
-    }
-    else if (strstr(temp, "user=") != NULL && strstr(temp, "?start=Start") == NULL)
-    {     
-        page = FIRST;
-    }
-    else
-    {
-        page = INTRO;
-    }
+    parseCorrectHtml(temp, page);
+    
 
     printf("%s", temp);
     // sanitise the URI
@@ -124,55 +155,11 @@ static bool manage_http_request(int sockfd, char* guesses)
     {
         if (page == INTRO)
         {
-            // get the size of the file
-            struct stat st;
-            stat("html/1_intro.html", &st);
-            n = sprintf(buff, HTTP_200_FORMAT, st.st_size);
-            // send the header first
-            if (write(sockfd, buff, n) < 0)
-            {
-                perror("write");
-                return false;
-            }
-            // send the file
-            int filefd = open("html/1_intro.html", O_RDONLY);
-            do
-            {
-                n = sendfile(sockfd, filefd, NULL, 2048);
-            } while (n > 0);
-            if (n < 0)
-            {
-                perror("sendfile");
-                close(filefd);
-                return false;
-            }
-            close(filefd);
+            loadHtml(sockfd, buff, "html/1_intro.html");  
         }
         else if (page == START)
         {
-            // get the size of the file
-            struct stat st;
-            stat("html/3_first_turn.html", &st);
-            n = sprintf(buff, HTTP_200_FORMAT, st.st_size);
-            // send the header first
-            if (write(sockfd, buff, n) < 0)
-            {
-                perror("write");
-                return false;
-            }
-            // send the file
-            int filefd = open("html/3_first_turn.html", O_RDONLY);
-            do
-            {
-                n = sendfile(sockfd, filefd, NULL, 2048);
-            } while (n > 0);
-            if (n < 0)
-            {
-                perror("sendfile");
-                close(filefd);
-                return false;
-            }
-            close(filefd);
+            loadHtml(sockfd, buff, "html/3_first_turn.html");
             printf("%s", buff);
         }
     }
@@ -185,8 +172,7 @@ static bool manage_http_request(int sockfd, char* guesses)
             char *username = strstr(buff, "user=")+5;
             int username_length = strlen(username);
             char *str = malloc(sizeof(char) * 2049);
-            sprintf(str, "<div>%s</div><form method=\"GET\"><input type=\"submit\" class=\"button\" name=\"start\"  value=\"Start\"/></form><form method=\" POST \"><input type=\"submit\" class=\"button\" name=\"quit\" value=\"Quit\"/></form></body></html>", username);
-
+            
             long added_length = username_length + 11;
 
             // get the size of the file
@@ -194,6 +180,7 @@ static bool manage_http_request(int sockfd, char* guesses)
             stat("html/2_start.html", &st);
             long size = st.st_size;
             n = sprintf(buff, HTTP_200_FORMAT, st.st_size);
+
             // send the header first
             if (write(sockfd, buff, n) < 0)
             {
@@ -211,8 +198,17 @@ static bool manage_http_request(int sockfd, char* guesses)
                 return false;
             }
             close(filefd);
+
             
-            sprintf(buff, "<!DOCTYPE html><html><head></head><body><h2>Image Tagger Game</h2><img src=\"https://swift.rc.nectar.org.au/v1/AUTH_eab314456b624071ac5aecd721b977f0/comp30023-project/image-3.jpg\" alt=\"HTML5 Icon\" style=\"width:700px;height:400px;\">%s", str);
+            char tempbuffer[2049];
+            char *rest = strstr(buff, "<form");
+
+            memcpy(tempbuffer, buff, 230);
+            tempbuffer[230] = '\0';
+            printf("%s", rest);
+            strcat(tempbuffer, str);
+            strcat(tempbuff, rest);
+            strcpy(buff, tempbuff);
 
             if (write(sockfd, buff, sizeof(buff)) < 0)
             {
@@ -256,8 +252,8 @@ static bool manage_http_request(int sockfd, char* guesses)
             close(filefd);
 
             char tempbuff[2049];
-            memcpy(tempbuff, buff, 256);
-            tempbuff[256] = '\0';
+            memcpy(tempbuff, buff, 248);
+            tempbuff[248] = '\0';
             
             strcat(tempbuff, str);
 
@@ -277,29 +273,7 @@ static bool manage_http_request(int sockfd, char* guesses)
         }
         else if (page == QUIT)
         {
-            // get the size of the file
-            struct stat st;
-            stat("html/7_gameover.html", &st);
-            n = sprintf(buff, HTTP_200_FORMAT, st.st_size);
-            // send the header first
-            if (write(sockfd, buff, n) < 0)
-            {
-                perror("write");
-                return false;
-            }
-            // send the file
-            int filefd = open("html/7_gameover.html", O_RDONLY);
-            do
-            {
-                n = sendfile(sockfd, filefd, NULL, 2048);
-            } while (n > 0);
-            if (n < 0)
-            {
-                perror("sendfile");
-                close(filefd);
-                return false;
-            }
-            close(filefd);
+            loadHtml(sockfd, buff, "html/7_gameover.html");
         }
     }
 
