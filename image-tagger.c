@@ -25,12 +25,14 @@
 static char const *const HTTP_200_FORMAT = "HTTP/1.1 200 OK\r\n\
 Content-Type: text/html\r\n\
 Content-Length: %ld\r\n\r\n";
-static char const *const HTTP_400 = "HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n";
-static int const HTTP_400_LENGTH = 47;
-static char const *const HTTP_404 = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n";
-static int const HTTP_404_LENGTH = 45;
 
-static char *filePath;
+static const char *INTRO_PAGE = "html/1_intro.html";
+static const char *START_PAGE = "html/2_start.html";
+static const char *FIRSTURN_PAGE = "html/3_first_turn.html";
+static const char *ACCEPTED_PAGE = "html/4_accepted.html";
+static const char *DISCARDED_PAGE = "html/5_discarded.html";
+static const char *ENDGAME_PAGE = "html/6_endgame.html";
+static const char *GAMEOVER_PAGE = "html/7_gameover.html";
 
 static int user1 = -1;
 static int user1_start = 0;
@@ -41,6 +43,8 @@ static int user2 = -1;
 static int user2_start = 0;
 char user2_guesses[20][100];
 int number_guesses_user2 = 0;
+static const char *filePath;
+int gameover = 0;
 
 // represents the types of method
 typedef enum
@@ -62,6 +66,7 @@ typedef enum
     NOTDEFINED,
     EMPTY
 } Page;
+
 
 void removeSubstring(char *s, const char *toremove)
 {
@@ -129,10 +134,11 @@ void loadHtml(int n, int sockfd, char* buff, const char *pathname)
     close(filefd);
 }
 
-static bool manage_http_request(int sockfd, char *guesses)
+static bool manage_http_request(int sockfd)
 {
     // try to read the request
     char buff[2049];
+     
     int n = read(sockfd, buff, 2049);
     if (n <= 0)
     {
@@ -166,11 +172,11 @@ static bool manage_http_request(int sockfd, char *guesses)
     {
         if (page == INTRO)
         {
-            loadHtml(n, sockfd, buff, "html/1_intro.html");  
+            loadHtml(n, sockfd, buff, INTRO_PAGE);  
         }
         else if (page == START)
         {
-            loadHtml(n, sockfd, buff, "html/3_first_turn.html");
+            loadHtml(n, sockfd, buff, FIRSTURN_PAGE);
             printf("%s", buff);
         }
     }
@@ -190,11 +196,11 @@ static bool manage_http_request(int sockfd, char *guesses)
         {
             user2 = sockfd;
         }
-
+        filePath = START_PAGE;
         struct stat st;
-        if (method == QUIT)
+        if (page == QUIT)
         {
-            filePath = = "html/7_gameover.html";
+            filePath = GAMEOVER_PAGE;
             stat(filePath, &st);
             // Reset User
             if (sockfd == user1)
@@ -219,7 +225,7 @@ static bool manage_http_request(int sockfd, char *guesses)
                 return false;
             }
 
-            int filefd = open(webpage, O_RDONLY);
+            int filefd = open(filePath, O_RDONLY);
             n = read(filefd, buff, 2048);
             if (n < 0)
             {
@@ -228,26 +234,167 @@ static bool manage_http_request(int sockfd, char *guesses)
                 return false;
             }
             close(filefd);
-            stat(webpage, &st);
+            stat(filePath, &st);
             if (write(sockfd, buff, st.st_size) < 0)
             {
                 perror("write");
                 return false;
             }
         }
-        else if (method == FIRST)
+        else if (page == FIRST)
         {
-        }
-        else if (method == ACCEPTED)
-        {
+            stat(filePath, &st);
+            //parse the username
+            username = strstr(buff, "user=") + 5;
+            username_length = strlen(username);
+            added_length = username_length + 2;
 
+            size = st.st_size + added_length;
+            n = sprintf(buff, HTTP_200_FORMAT, size);
+        }
+        else if (page == ACCEPTED)
+        {
+            //parse the keyword
+            char *keyword = strstr(buff, "keyword=") + 8;
+            int keyword_length = strlen(keyword);
+            keyword[keyword_length - 12] = '\0';
+
+            //if play1 is connected and playing
+            if (sockfd == user1)
+            {
+                if (user2_start == 1)
+                {
+                    filePath = ACCEPTED_PAGE;
+                    strcpy(user1_guesses[number_guesses_user1], keyword);
+                    printf("%s\n", user1_guesses[number_guesses_user1]);
+                    number_guesses_user1++;
+
+                    for (int i = 0; i < number_guesses_user2; i++)
+                    {
+                        if (strcmp(user2_guesses[i], keyword) == 0)
+                        {
+                            gameover = 1;
+                            user1 = -1;
+                            user2 = -1;
+                            number_guesses_user1 = 0;
+                            number_guesses_user2 = 0;
+                            user1_start = 0;
+                            user2_start = 0;
+                            for (int i = 0; i < 100; i++)
+                            {
+                                strcpy(user1_guesses[i], "");
+                                strcpy(user2_guesses[i], "");
+                            }
+                            filePath = ENDGAME_PAGE;
+                        }
+                    }
+                }
+                else if (gameover == 1)
+                {
+                    filePath = ENDGAME_PAGE;
+                    gameover = 0;
+                }
+                else
+                {
+                    filePath = DISCARDED_PAGE;
+                }
+            }
+            else if (sockfd == user2)
+            {
+                if (user1_start == 1)
+                {
+                    filePath = ACCEPTED_PAGE;
+                    strcpy(user2_guesses[number_guesses_user2], keyword);
+                    printf("%s\n", user2_guesses[number_guesses_user2]);
+                    number_guesses_user2++;
+
+                    for (int i = 0; i < number_guesses_user1; i++)
+                    {
+                        if (strcmp(user1_guesses[i], keyword) == 0)
+                        {
+                            gameover = 1;
+                            user1 = -1;
+                            user2 = -1;
+                            number_guesses_user1 = 0;
+                            number_guesses_user2 = 0;
+                            user1_start = 0;
+                            user2_start = 0;
+                            for (int i = 0; i < 100; i++)
+                            {
+                                strcpy(user1_guesses[i], "");
+                                strcpy(user2_guesses[i], "");
+                            }
+                            filePath = ENDGAME_PAGE;
+                        }
+                    }
+                }
+                else if (gameover == 1)
+                {
+                    filePath = ENDGAME_PAGE;
+                    gameover = 0;
+                }
+                else
+                {
+                    filePath = DISCARDED_PAGE;
+                }
+            }
+            else
+            {
+                printf("No one is logged in..");
+            }
+            stat(filePath, &st);
+            n = sprintf(buff, HTTP_200_FORMAT, st.st_size);
         }
         else
         {
             printf("\n\n\nerror reading html...\n\n\n");
         }
+       
+       
+        // send the header first
+        if (write(sockfd, buff, n) < 0)
+        {
+            perror("write");
+            return false;
+        }
+        // read the content of the HTML file
+        int filefd = open(filePath, O_RDONLY);
+        n = read(filefd, buff, 2048);
 
-        filePath
+        if (n < 0)
+        {
+            perror("read");
+            close(filefd);
+            return false;
+        }
+        close(filefd);
+        if ((strlen(username) > 0) && (strstr(buff, "user=") != NULL))
+        {
+            // move the trailing part backward
+            int p1, p2;
+            for (p1 = size - 1, p2 = p1 - added_length; p1 >= size - 25; --p1, --p2)
+                buff[p1] = buff[p2];
+            ++p2;
+            // put the separator
+            buff[p2++] = ',';
+            buff[p2++] = ' ';
+            // copy the username
+            strncpy(buff + p2, username, username_length);
+            if (write(sockfd, buff, size) < 0)
+            {
+                perror("write");
+                return false;
+            }
+        }
+        else
+        {
+            if (write(sockfd, buff, st.st_size) < 0)
+            {
+                perror("write");
+                return false;
+            }
+        }
+        
     }
 
     else{
@@ -351,7 +498,7 @@ int main(int argc, char * argv[])
                 }
                 
                 // a request is sent from the client
-                else if (!manage_http_request(i, guesses))
+                else if (!manage_http_request(i))
                 {
                     close(i);
                     FD_CLR(i, &masterfds);
