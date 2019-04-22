@@ -67,14 +67,6 @@ typedef enum
     EMPTY
 } Page;
 
-
-void removeSubstring(char *s, const char *toremove)
-{
-    while((s = strstr(s, toremove))){
-        memmove(s, s + strlen(toremove), 1 + strlen(s + strlen(toremove)));
-    }   
-        
-}
 METHOD parseMethod(char *curr, METHOD method)
 {
     // parse the method
@@ -114,7 +106,26 @@ Page parseCorrectHtml(char *temp, Page page)
     }
     return page;
 }
-void loadHtml(int n, int sockfd, char* buff, const char *pathname)
+void loadPOSTHtml(int n, int sockfd, char *buff, const char *pathname)
+{
+    if (write(sockfd, buff, n) < 0)
+    {
+        perror("write");
+        return false;
+    }
+    // read the content of the HTML file
+    int filefd = open(pathname, O_RDONLY);
+    n = read(filefd, buff, 2048);
+
+    if (n < 0)
+    {
+        perror("read");
+        close(filefd);
+        return false;
+    }
+    close(filefd);
+}
+void loadGETHtml(int n, int sockfd, char *buff, const char *pathname)
 {
     // get the size of the file
     struct stat st;
@@ -134,11 +145,33 @@ void loadHtml(int n, int sockfd, char* buff, const char *pathname)
     close(filefd);
 }
 
+void addUserName(int sockfd, char *buff, char *username, size_t size)
+{
+    int username_length = strlen(username);
+    long added_length = username_length + 2;
+    if (username_length > 0)
+    {
+        // move the trailing part backward
+        int p1, p2;
+        for (p1 = size - 1, p2 = p1 - added_length; p1 >= size - 25; --p1, --p2)
+            buff[p1] = buff[p2];
+        ++p2;
+        // put the separator
+        buff[p2++] = ',';
+        buff[p2++] = ' ';
+        // copy the username
+        strncpy(buff + p2, username, username_length);
+        if (write(sockfd, buff, size) < 0)
+        {
+            perror("write");
+        }
+    }
+}
 static bool manage_http_request(int sockfd)
 {
     // try to read the request
     char buff[2049];
-     
+
     int n = read(sockfd, buff, 2049);
     if (n <= 0)
     {
@@ -153,7 +186,7 @@ static bool manage_http_request(int sockfd)
     buff[n] = 0;
 
     // parse the method
-    char * curr = buff;
+    char *curr = buff;
     METHOD method = UNKNOWN;
     method = parseMethod(curr, method);
 
@@ -161,18 +194,17 @@ static bool manage_http_request(int sockfd)
     char *temp = buff;
     Page page = EMPTY;
     page = parseCorrectHtml(temp, page);
-    
 
-    printf("%s", temp);
     // sanitise the URI
     while (*curr == '.' || *curr == '/')
         ++curr;
+
     // assume the only valid request URI is "/" but it can be modified to accept more files
     if (method == GET)
     {
         if (page == INTRO)
         {
-            loadHtml(n, sockfd, buff, INTRO_PAGE);  
+            loadGETHtml(n, sockfd, buff, INTRO_PAGE);
         }
         else if (page == START)
         {
@@ -184,11 +216,11 @@ static bool manage_http_request(int sockfd)
             {
                 user2_start = 1;
             }
-            loadHtml(n, sockfd, buff, FIRSTURN_PAGE);
-            printf("%s", buff);
+
+            loadGETHtml(n, sockfd, buff, FIRSTURN_PAGE);
         }
     }
-        
+
     else if (method == POST)
     {
         char *username;
@@ -204,8 +236,10 @@ static bool manage_http_request(int sockfd)
         {
             user2 = sockfd;
         }
+
         filePath = START_PAGE;
         struct stat st;
+
         if (page == QUIT)
         {
             filePath = GAMEOVER_PAGE;
@@ -227,37 +261,18 @@ static bool manage_http_request(int sockfd)
             }
 
             n = sprintf(buff, HTTP_200_FORMAT, st.st_size);
-            if (write(sockfd, buff, n) < 0)
-            {
-                perror("write");
-                return false;
-            }
-
-            int filefd = open(filePath, O_RDONLY);
-            n = read(filefd, buff, 2048);
-            if (n < 0)
-            {
-                perror("read");
-                close(filefd);
-                return false;
-            }
-            close(filefd);
-            stat(filePath, &st);
-            if (write(sockfd, buff, st.st_size) < 0)
-            {
-                perror("write");
-                return false;
-            }
         }
         else if (page == FIRST)
         {
             stat(filePath, &st);
+
             //parse the username
             username = strstr(buff, "user=") + 5;
             username_length = strlen(username);
             added_length = username_length + 2;
 
             size = st.st_size + added_length;
+
             n = sprintf(buff, HTTP_200_FORMAT, size);
         }
         else if (page == ACCEPTED)
@@ -359,55 +374,12 @@ static bool manage_http_request(int sockfd)
         {
             printf("\n\n\nerror reading html...\n\n\n");
         }
-       
-       
-        // send the header first
-        if (write(sockfd, buff, n) < 0)
-        {
-            perror("write");
-            return false;
-        }
-        // read the content of the HTML file
-        int filefd = open(filePath, O_RDONLY);
-        n = read(filefd, buff, 2048);
-
-        if (n < 0)
-        {
-            perror("read");
-            close(filefd);
-            return false;
-        }
-        close(filefd);
-        if ((strlen(username) > 0) && (strstr(buff, "user=") != NULL))
-        {
-            // move the trailing part backward
-            int p1, p2;
-            for (p1 = size - 1, p2 = p1 - added_length; p1 >= size - 25; --p1, --p2)
-                buff[p1] = buff[p2];
-            ++p2;
-            // put the separator
-            buff[p2++] = ',';
-            buff[p2++] = ' ';
-            // copy the username
-            strncpy(buff + p2, username, username_length);
-            if (write(sockfd, buff, size) < 0)
-            {
-                perror("write");
-                return false;
-            }
-        }
-        else
-        {
-            if (write(sockfd, buff, st.st_size) < 0)
-            {
-                perror("write");
-                return false;
-            }
-        }
-        
+        loadPOSTHtml(n, sockfd, buff, filePath);
+        addUserName(sockfd, buff, username, size);
     }
 
-    else{
+    else
+    {
         fprintf(stderr, "no other methods supported");
    }
 
@@ -465,7 +437,6 @@ int main(int argc, char * argv[])
     FD_SET(sockfd, &masterfds);
     // record the maximum socket number
     int maxfd = sockfd;
-    char *guesses = malloc(sizeof(char) * 1000);
     while (1)
     {
         // monitor file descriptors
