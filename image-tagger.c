@@ -26,6 +26,9 @@ static char const *const HTTP_200_FORMAT = "HTTP/1.1 200 OK\r\n\
 Content-Type: text/html\r\n\
 Content-Length: %ld\r\n\r\n";
 
+static char const *const HTTP_404 = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n";
+static int const HTTP_404_LENGTH = 45;
+
 static const char *INTRO_PAGE = "html/1_intro.html";
 static const char *START_PAGE = "html/2_start.html";
 static const char *FIRSTURN_PAGE = "html/3_first_turn.html";
@@ -84,7 +87,7 @@ METHOD parseMethod(char *curr, METHOD method)
 }
 Page parseCorrectHtml(char *temp, Page page)
 {
-    if (strstr(temp, "guess=") != NULL)
+    if (strstr(temp, "guess=Guess") != NULL)
     {
         page = ACCEPTED;
     }
@@ -116,7 +119,7 @@ void loadPOSTHtml(int n, int sockfd, char *buff, const char *pathname)
     // read the content of the HTML file
     int filefd = open(pathname, O_RDONLY);
     n = read(filefd, buff, 2048);
-
+    printf("\n%s, %d\n ", test2, n);
     if (n < 0)
     {
         perror("read");
@@ -199,189 +202,192 @@ static bool manage_http_request(int sockfd)
     while (*curr == '.' || *curr == '/')
         ++curr;
 
-    // assume the only valid request URI is "/" but it can be modified to accept more files
-    if (method == GET)
+    if (strlen(curr) > 0)
     {
-        if (page == INTRO)
+        // assume the only valid request URI is "/" but it can be modified to accept more files
+        if (method == GET)
         {
-            loadGETHtml(n, sockfd, buff, INTRO_PAGE);
-        }
-        else if (page == START)
-        {
-            if (sockfd == user1)
+            if (page == INTRO)
             {
-                user1_start = 1;
+                loadGETHtml(n, sockfd, buff, INTRO_PAGE);
             }
-            else if (sockfd == user2)
+            else if (page == START)
             {
-                user2_start = 1;
-            }
-
-            loadGETHtml(n, sockfd, buff, FIRSTURN_PAGE);
-        }
-    }
-
-    else if (method == POST)
-    {
-        char *username;
-        int username_length;
-        long added_length;
-        long size;
-        // setup the users
-        if ((user1 == -1) && (sockfd != user2))
-        {
-            user1 = sockfd;
-        }
-        else if ((user2 == -1) && (sockfd != user1))
-        {
-            user2 = sockfd;
-        }
-
-        filePath = START_PAGE;
-        struct stat st;
-
-        if (page == QUIT)
-        {
-            filePath = GAMEOVER_PAGE;
-            stat(filePath, &st);
-            // Reset User
-            if (sockfd == user1)
-            {
-                user1 = -1;
-                user1_start = 0;
-            }
-            else if (sockfd == user2)
-            {
-                user2 = -1;
-                user2_start = 0;
-            }
-            else
-            {
-                printf("Sockfd not set for some reason..\n\n");
-            }
-
-            n = sprintf(buff, HTTP_200_FORMAT, st.st_size);
-        }
-        else if (page == FIRST)
-        {
-            stat(filePath, &st);
-
-            //parse the username
-            username = strstr(buff, "user=") + 5;
-            username_length = strlen(username);
-            added_length = username_length + 2;
-
-            size = st.st_size + added_length;
-
-            n = sprintf(buff, HTTP_200_FORMAT, size);
-        }
-        else if (page == ACCEPTED)
-        {
-            //parse the keyword
-            char *keyword = strstr(buff, "keyword=") + 8;
-            int keyword_length = strlen(keyword);
-            keyword[keyword_length - 12] = '\0';
-
-            //if play1 is connected and playing
-            if (sockfd == user1)
-            {
-                //if player 2 is connected too
-                if (user2_start == 1)
+                if (sockfd == user1)
                 {
-                    filePath = ACCEPTED_PAGE;
-                    strcpy(user1_guesses[number_guesses_user1], keyword);
-                    printf("%s\n", user1_guesses[number_guesses_user1]);
-                    number_guesses_user1++;
+                    user1_start = 1;
+                }
+                else if (sockfd == user2)
+                {
+                    user2_start = 1;
+                }
 
-                    for (int i = 0; i < number_guesses_user2; i++)
+                loadGETHtml(n, sockfd, buff, FIRSTURN_PAGE);
+            }
+        }
+
+        else if (method == POST)
+        {
+
+            char *username;
+            long size;
+            // setup the users
+            if ((user1 == -1) && (sockfd != user2))
+            {
+                user1 = sockfd;
+            }
+            else if ((user2 == -1) && (sockfd != user1))
+            {
+                user2 = sockfd;
+            }
+
+            filePath = START_PAGE;
+            struct stat st;
+            // when Quit button is clicket, exits games
+            if (page == QUIT)
+            {
+                filePath = GAMEOVER_PAGE;
+                stat(filePath, &st);
+                // Reset User
+                if (sockfd == user1)
+                {
+                    user1 = -1;
+                    user1_start = 0;
+                }
+                else if (sockfd == user2)
+                {
+                    user2 = -1;
+                    user2_start = 0;
+                }
+                n = sprintf(buff, HTTP_200_FORMAT, st.st_size);
+            }
+
+            else if (page == FIRST)
+            {
+                filePath = START_PAGE;
+                stat(filePath, &st);
+
+                //parse the username
+                username = strstr(buff, "user=") + 5;
+                size = st.st_size + strlen(username) + 2;
+
+                n = sprintf(buff, HTTP_200_FORMAT, size);
+                
+            }
+
+            else if (page == ACCEPTED)
+            {
+                //parse the keyword
+                char *keyword = strstr(buff, "keyword=") + 8;
+                int keyword_length = strlen(keyword);
+                keyword[keyword_length - 12] = '\0';
+
+                //if play1 is connected and playing
+                if (sockfd == user1)
+                {
+                    //if player 2 is connected too
+                    if (user2_start == 1)
                     {
-                        if (strcmp(user2_guesses[i], keyword) == 0)
+                        filePath = ACCEPTED_PAGE;
+                        strcpy(user1_guesses[number_guesses_user1], keyword);
+                        printf("%s\n", user1_guesses[number_guesses_user1]);
+                        number_guesses_user1++;
+
+                        for (int i = 0; i < number_guesses_user2; i++)
                         {
-                            gameover = 1;
-                            user1 = -1;
-                            user2 = -1;
-                            number_guesses_user1 = 0;
-                            number_guesses_user2 = 0;
-                            user1_start = 0;
-                            user2_start = 0;
-                            for (int i = 0; i < 100; i++)
+                            if (strcmp(user2_guesses[i], keyword) == 0)
                             {
-                                strcpy(user1_guesses[i], "");
-                                strcpy(user2_guesses[i], "");
+                                gameover = 1;
+                                user1 = -1;
+                                user2 = -1;
+                                number_guesses_user1 = 0;
+                                number_guesses_user2 = 0;
+                                user1_start = 0;
+                                user2_start = 0;
+                                for (int i = 0; i < 100; i++)
+                                {
+                                    strcpy(user1_guesses[i], "");
+                                    strcpy(user2_guesses[i], "");
+                                }
+                                filePath = ENDGAME_PAGE;
                             }
-                            filePath = ENDGAME_PAGE;
                         }
                     }
+                    else if (gameover == 1)
+                    {
+                        filePath = ENDGAME_PAGE;
+                        gameover = 0;
+                    }
+                    else
+                    {
+                        filePath = DISCARDED_PAGE;
+                    }
                 }
-                else if (gameover == 1)
+                else if (sockfd == user2)
                 {
-                    filePath = ENDGAME_PAGE;
-                    gameover = 0;
+                    //if player 1 is connected too
+                    if (user1_start == 1)
+                    {
+                        filePath = ACCEPTED_PAGE;
+                        strcpy(user2_guesses[number_guesses_user2], keyword);
+                        printf("%s\n", user2_guesses[number_guesses_user2]);
+                        number_guesses_user2++;
+
+                        for (int i = 0; i < number_guesses_user1; i++)
+                        {
+                            if (strcmp(user1_guesses[i], keyword) == 0)
+                            {
+                                gameover = 1;
+                                user1 = -1;
+                                user2 = -1;
+                                number_guesses_user1 = 0;
+                                number_guesses_user2 = 0;
+                                user1_start = 0;
+                                user2_start = 0;
+                                for (int i = 0; i < 100; i++)
+                                {
+                                    strcpy(user1_guesses[i], "");
+                                    strcpy(user2_guesses[i], "");
+                                }
+                                filePath = ENDGAME_PAGE;
+                            }
+                        }
+                    }
+                    else if (gameover == 1)
+                    {
+                        filePath = ENDGAME_PAGE;
+                        gameover = 0;
+                    }
+                    else
+                    {
+                        filePath = DISCARDED_PAGE;
+                    }
                 }
                 else
                 {
-                    filePath = DISCARDED_PAGE;
+                    printf("No one is logged in..");
                 }
-            }
-            else if (sockfd == user2)
-            {
-                //if player 1 is connected too
-                if (user1_start == 1)
-                {
-                    filePath = ACCEPTED_PAGE;
-                    strcpy(user2_guesses[number_guesses_user2], keyword);
-                    printf("%s\n", user2_guesses[number_guesses_user2]);
-                    number_guesses_user2++;
-
-                    for (int i = 0; i < number_guesses_user1; i++)
-                    {
-                        if (strcmp(user1_guesses[i], keyword) == 0)
-                        {
-                            gameover = 1;
-                            user1 = -1;
-                            user2 = -1;
-                            number_guesses_user1 = 0;
-                            number_guesses_user2 = 0;
-                            user1_start = 0;
-                            user2_start = 0;
-                            for (int i = 0; i < 100; i++)
-                            {
-                                strcpy(user1_guesses[i], "");
-                                strcpy(user2_guesses[i], "");
-                            }
-                            filePath = ENDGAME_PAGE;
-                        }
-                    }
-                }
-                else if (gameover == 1)
-                {
-                    filePath = ENDGAME_PAGE;
-                    gameover = 0;
-                }
-                else
-                {
-                    filePath = DISCARDED_PAGE;
-                }
+                stat(filePath, &st);
+                n = sprintf(buff, HTTP_200_FORMAT, st.st_size);
+                
             }
             else
             {
-                printf("No one is logged in..");
+                printf("\n\n\nerror reading html...\n\n\n");
             }
-            stat(filePath, &st);
-            n = sprintf(buff, HTTP_200_FORMAT, st.st_size);
+            loadPOSTHtml(n,sockfd,buff,filePath);
+            addUserName(sockfd, buff, username, size);
         }
         else
         {
-            printf("\n\n\nerror reading html...\n\n\n");
+            fprintf(stderr, "no other methods supported");
         }
-        loadPOSTHtml(n, sockfd, buff, filePath);
-        addUserName(sockfd, buff, username, size);
     }
-
-    else
+    else if (write(sockfd, HTTP_404, HTTP_404_LENGTH) < 0)
     {
-        fprintf(stderr, "no other methods supported");
-   }
+        perror("write");
+        return false;
+    }
 
     return true;
 
