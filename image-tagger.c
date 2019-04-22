@@ -22,9 +22,25 @@
 #include <unistd.h>
 
 // constants
-static char const * const HTTP_200_FORMAT = "HTTP/1.1 200 OK\r\n\
+static char const *const HTTP_200_FORMAT = "HTTP/1.1 200 OK\r\n\
 Content-Type: text/html\r\n\
 Content-Length: %ld\r\n\r\n";
+static char const *const HTTP_400 = "HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n";
+static int const HTTP_400_LENGTH = 47;
+static char const *const HTTP_404 = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n";
+static int const HTTP_404_LENGTH = 45;
+
+static char *filePath;
+
+static int user1 = -1;
+static int user1_start = 0;
+char user1_guesses[20][100];
+int number_guesses_user1 = 0;
+
+static int user2 = -1;
+static int user2_start = 0;
+char user2_guesses[20][100];
+int number_guesses_user2 = 0;
 
 // represents the types of method
 typedef enum
@@ -161,27 +177,49 @@ static bool manage_http_request(int sockfd, char *guesses)
         
     else if (method == POST)
     {
-        if (page == FIRST)
+        char *username;
+        int username_length;
+        long added_length;
+        long size;
+        // setup the users
+        if ((user1 == -1) && (sockfd != user2))
         {
-            // locate the username
-            char *username = strstr(buff, "user=")+5;
-            char *str = malloc(sizeof(char) * 100);
-            sprintf(str, "\n<p>%s</p>\n", username);
+            user1 = sockfd;
+        }
+        else if ((user2 == -1) && (sockfd != user1))
+        {
+            user2 = sockfd;
+        }
 
-            // get the size of the file
-            struct stat st;
-            stat("html/2_start.html", &st);
+        struct stat st;
+        if (method == QUIT)
+        {
+            filePath = = "html/7_gameover.html";
+            stat(filePath, &st);
+            // Reset User
+            if (sockfd == user1)
+            {
+                user1 = -1;
+                user1_start = 0;
+            }
+            else if (sockfd == user2)
+            {
+                user2 = -1;
+                user2_start = 0;
+            }
+            else
+            {
+                printf("Sockfd not set for some reason..\n\n");
+            }
+
             n = sprintf(buff, HTTP_200_FORMAT, st.st_size);
-
-            // send the header first
             if (write(sockfd, buff, n) < 0)
             {
                 perror("write");
                 return false;
             }
-            
-            // read the content of the HTML file
-            int filefd = open("html/2_start.html", O_RDONLY);
+
+            int filefd = open(webpage, O_RDONLY);
             n = read(filefd, buff, 2048);
             if (n < 0)
             {
@@ -190,82 +228,26 @@ static bool manage_http_request(int sockfd, char *guesses)
                 return false;
             }
             close(filefd);
-
-            
-            char tempbuffer[2049];
-            char *rest = strstr(buff, "<form");
-
-            memcpy(tempbuffer, buff, strlen(buff) - strlen(rest));
-            tempbuffer[strlen(buff) - strlen(rest)] = '\0';
-            printf("\n%lu\n", strlen(buff) - strlen(rest));
-            strcat(tempbuffer, str);
-            strcat(tempbuffer, rest);
-            strcpy(buff, tempbuffer);
-
-            if (write(sockfd, buff, sizeof(buff)) < 0)
+            stat(webpage, &st);
+            if (write(sockfd, buff, st.st_size) < 0)
             {
                 perror("write");
                 return false;
             }
-            printf("%s", buff);
         }
-        else if (page == ACCEPTED)
+        else if (method == FIRST)
+        {
+        }
+        else if (method == ACCEPTED)
         {
 
-            char *guess = strstr(buff, "keyword=") + 8;
-            char *comma = ", ";
-
-            strcat(guesses, guess);
-            strcat(guesses, comma);
-            removeSubstring(guesses, "&guess=Guess");
-
-            char *string = malloc(sizeof(char) * 100);
-            sprintf(string, "\n<p>%s</p>\n", guesses);
-
-            struct stat st;
-            stat("html/4_accepted.html", &st);
-            n = sprintf(buff, HTTP_200_FORMAT, st.st_size);
-            // send the header first
-            if (write(sockfd, buff, n) < 0)
-            {
-                perror("write");
-                return false;
-            }
-            // send the file
-            int filefd = open("html/4_accepted.html", O_RDONLY);
-            n = read(filefd, buff, 2048);
-            if (n < 0)
-            {
-                perror("read");
-                close(filefd);
-                return false;
-            }
-            close(filefd);
-
-            char tempbuff[2049];
-            char *rest = strstr(buff, "<f");
-            memcpy(tempbuff, buff, strlen(buff) - strlen(rest));
-            tempbuff[strlen(buff) - strlen(rest)] = '\0';
-
-            strcat(tempbuff, string);
-            
-            strcat(tempbuff, rest);
-            strcpy(buff, tempbuff);
-
-            printf("%s", buff);
-
-            if (write(sockfd, buff,sizeof(buff)) < 0)
-            {
-                perror("The following error occurred");
-                return false;
-            }
-             
-            
         }
-        else if (page == QUIT)
+        else
         {
-            loadHtml(n, sockfd, buff, "html/7_gameover.html");
+            printf("\n\n\nerror reading html...\n\n\n");
         }
+
+        filePath
     }
 
     else{
