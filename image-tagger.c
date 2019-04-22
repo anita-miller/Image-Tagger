@@ -25,8 +25,6 @@
 static char const * const HTTP_200_FORMAT = "HTTP/1.1 200 OK\r\n\
 Content-Type: text/html\r\n\
 Content-Length: %ld\r\n\r\n";
-static char const * const HTTP_400 = "HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n";
-static int const HTTP_400_LENGTH = 47;
 
 // represents the types of method
 typedef enum
@@ -51,10 +49,12 @@ typedef enum
 
 void removeSubstring(char *s, const char *toremove)
 {
-    while(s = strstr(s, toremove))
+    while((s = strstr(s, toremove))){
         memmove(s, s + strlen(toremove), 1 + strlen(s + strlen(toremove)));
+    }   
+        
 }
-void parseMethod(char *curr, METHOD method)
+METHOD parseMethod(char *curr, METHOD method)
 {
     // parse the method
     if (strncmp(curr, "GET ", 4) == 0)
@@ -67,8 +67,9 @@ void parseMethod(char *curr, METHOD method)
         curr += 5;
         method = POST;
     }
+    return method;
 }
-void parseCorrectHtml(char *temp, Page page)
+Page parseCorrectHtml(char *temp, Page page)
 {
     if (strstr(temp, "guess=") != NULL)
     {
@@ -90,8 +91,9 @@ void parseCorrectHtml(char *temp, Page page)
     {
         page = INTRO;
     }
+    return page;
 }
-void loadHtml(int sockfd, char buff, const char *pathname)
+void loadHtml(int n, int sockfd, char* buff, const char *pathname)
 {
     // get the size of the file
     struct stat st;
@@ -101,7 +103,6 @@ void loadHtml(int sockfd, char buff, const char *pathname)
     if (write(sockfd, buff, n) < 0)
     {
         perror("write");
-        return false;
     }
     // send the file
     int filefd = open(pathname, O_RDONLY);
@@ -109,12 +110,6 @@ void loadHtml(int sockfd, char buff, const char *pathname)
     {
         n = sendfile(sockfd, filefd, NULL, 2048);
     } while (n > 0);
-    if (n < 0)
-    {
-        perror("sendfile");
-        close(filefd);
-        return false;
-    }
     close(filefd);
 }
 
@@ -138,12 +133,12 @@ static bool manage_http_request(int sockfd, char *guesses)
     // parse the method
     char * curr = buff;
     METHOD method = UNKNOWN;
-    parseMethod(curr, method);
+    method = parseMethod(curr, method);
 
     //parse which html we need to load
     char *temp = buff;
     Page page = EMPTY;
-    parseCorrectHtml(temp, page);
+    page = parseCorrectHtml(temp, page);
     
 
     printf("%s", temp);
@@ -155,11 +150,11 @@ static bool manage_http_request(int sockfd, char *guesses)
     {
         if (page == INTRO)
         {
-            loadHtml(sockfd, buff, "html/1_intro.html");  
+            loadHtml(n, sockfd, buff, "html/1_intro.html");  
         }
         else if (page == START)
         {
-            loadHtml(sockfd, buff, "html/3_first_turn.html");
+            loadHtml(n, sockfd, buff, "html/3_first_turn.html");
             printf("%s", buff);
         }
     }
@@ -170,15 +165,12 @@ static bool manage_http_request(int sockfd, char *guesses)
         {
             // locate the username
             char *username = strstr(buff, "user=")+5;
-            int username_length = strlen(username);
-            char *str = malloc(sizeof(char) * 2049);
-            
-            long added_length = username_length + 11;
+            char *str = malloc(sizeof(char) * 100);
+            sprintf(str, "\n<p>%s</p>\n", username);
 
             // get the size of the file
             struct stat st;
             stat("html/2_start.html", &st);
-            long size = st.st_size;
             n = sprintf(buff, HTTP_200_FORMAT, st.st_size);
 
             // send the header first
@@ -203,12 +195,12 @@ static bool manage_http_request(int sockfd, char *guesses)
             char tempbuffer[2049];
             char *rest = strstr(buff, "<form");
 
-            memcpy(tempbuffer, buff, 230);
-            tempbuffer[230] = '\0';
-            printf("%s", rest);
+            memcpy(tempbuffer, buff, strlen(buff) - strlen(rest));
+            tempbuffer[strlen(buff) - strlen(rest)] = '\0';
+            printf("\n%lu\n", strlen(buff) - strlen(rest));
             strcat(tempbuffer, str);
-            strcat(tempbuff, rest);
-            strcpy(buff, tempbuff);
+            strcat(tempbuffer, rest);
+            strcpy(buff, tempbuffer);
 
             if (write(sockfd, buff, sizeof(buff)) < 0)
             {
@@ -227,12 +219,11 @@ static bool manage_http_request(int sockfd, char *guesses)
             strcat(guesses, comma);
             removeSubstring(guesses, "&guess=Guess");
 
-            char *str = malloc(sizeof(char) * 2049);
-            sprintf(str, "\n<div>%s</div>\n", guesses);
+            char *string = malloc(sizeof(char) * 100);
+            sprintf(string, "\n<p>%s</p>\n", guesses);
 
             struct stat st;
             stat("html/4_accepted.html", &st);
-            long size = st.st_size;
             n = sprintf(buff, HTTP_200_FORMAT, st.st_size);
             // send the header first
             if (write(sockfd, buff, n) < 0)
@@ -252,18 +243,18 @@ static bool manage_http_request(int sockfd, char *guesses)
             close(filefd);
 
             char tempbuff[2049];
-            memcpy(tempbuff, buff, 248);
-            tempbuff[248] = '\0';
-            
-            strcat(tempbuff, str);
+            char *rest = strstr(buff, "<f");
+            memcpy(tempbuff, buff, strlen(buff) - strlen(rest));
+            tempbuff[strlen(buff) - strlen(rest)] = '\0';
 
-            char *rest = strstr(buff, "<form");
-            printf("%s", rest);
+            strcat(tempbuff, string);
+            
             strcat(tempbuff, rest);
             strcpy(buff, tempbuff);
 
-            
-            if (write(sockfd, buff,8000) < 0)
+            printf("%s", buff);
+
+            if (write(sockfd, buff,sizeof(buff)) < 0)
             {
                 perror("The following error occurred");
                 return false;
@@ -273,7 +264,7 @@ static bool manage_http_request(int sockfd, char *guesses)
         }
         else if (page == QUIT)
         {
-            loadHtml(sockfd, buff, "html/7_gameover.html");
+            loadHtml(n, sockfd, buff, "html/7_gameover.html");
         }
     }
 
@@ -336,7 +327,6 @@ int main(int argc, char * argv[])
     // record the maximum socket number
     int maxfd = sockfd;
     char *guesses = malloc(sizeof(char) * 1000);
-    bool flag =false;
     while (1)
     {
         // monitor file descriptors
