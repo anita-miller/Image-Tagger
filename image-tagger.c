@@ -176,6 +176,14 @@ static bool manage_http_request(int sockfd)
         }
         else if (page == START)
         {
+            if (sockfd == user1)
+            {
+                user1_start = 1;
+            }
+            else if (sockfd == user2)
+            {
+                user2_start = 1;
+            }
             loadHtml(n, sockfd, buff, FIRSTURN_PAGE);
             printf("%s", buff);
         }
@@ -262,6 +270,7 @@ static bool manage_http_request(int sockfd)
             //if play1 is connected and playing
             if (sockfd == user1)
             {
+                //if player 2 is connected too
                 if (user2_start == 1)
                 {
                     filePath = ACCEPTED_PAGE;
@@ -301,6 +310,7 @@ static bool manage_http_request(int sockfd)
             }
             else if (sockfd == user2)
             {
+                //if player 1 is connected too
                 if (user1_start == 1)
                 {
                     filePath = ACCEPTED_PAGE;
