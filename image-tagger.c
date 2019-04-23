@@ -39,12 +39,12 @@ static const char *GAMEOVER_PAGE = "html/7_gameover.html";
 
 static int user1 = -1;
 static int user1_start = 0;
-char user1_guesses[20][100];
+char user1_guesses[100][100];
 int number_guesses_user1 = 0;
 
 static int user2 = -1;
 static int user2_start = 0;
-char user2_guesses[20][100];
+char user2_guesses[100][100];
 int number_guesses_user2 = 0;
 static const char *filePath;
 int gameover = 0;
@@ -114,17 +114,14 @@ void loadPOSTHtml(int n, int sockfd, char *buff, const char *pathname)
     if (write(sockfd, buff, n) < 0)
     {
         perror("write");
-        return false;
     }
     // read the content of the HTML file
     int filefd = open(pathname, O_RDONLY);
     n = read(filefd, buff, 2048);
-    printf("\n%s, %d\n ", test2, n);
     if (n < 0)
     {
         perror("read");
         close(filefd);
-        return false;
     }
     close(filefd);
 }
@@ -306,8 +303,8 @@ static bool manage_http_request(int sockfd)
                                 user2_start = 0;
                                 for (int i = 0; i < 100; i++)
                                 {
-                                    strcpy(user1_guesses[i], "");
-                                    strcpy(user2_guesses[i], "");
+                                    memset(user1_guesses[i], '\0', 100);
+                                    memset(user2_guesses[i], '\0', 100);
                                 }
                                 filePath = ENDGAME_PAGE;
                             }
@@ -346,8 +343,8 @@ static bool manage_http_request(int sockfd)
                                 user2_start = 0;
                                 for (int i = 0; i < 100; i++)
                                 {
-                                    strcpy(user1_guesses[i], "");
-                                    strcpy(user2_guesses[i], "");
+                                    memset(user1_guesses[i], '\0', 100);
+                                    memset(user2_guesses[i], '\0', 100);
                                 }
                                 filePath = ENDGAME_PAGE;
                             }
@@ -375,8 +372,48 @@ static bool manage_http_request(int sockfd)
             {
                 printf("\n\n\nerror reading html...\n\n\n");
             }
-            loadPOSTHtml(n,sockfd,buff,filePath);
-            addUserName(sockfd, buff, username, size);
+            // send the header first
+            if (write(sockfd, buff, n) < 0)
+            {
+                perror("write");
+                return false;
+            }
+            // read the content of the HTML file
+            int filefd = open(filePath, O_RDONLY);
+            n = read(filefd, buff, 2048);
+            
+            if (n < 0)
+            {
+                perror("read");
+                close(filefd);
+                return false;
+            }
+            close(filefd);
+
+            if((strlen(username) > 0) && (strstr(buff, "user=") != NULL) ){
+                // move the trailing part backward
+                int p1, p2;
+                for (p1 = size - 1, p2 = p1 - (strlen(username)+2); p1 >= size - 25; --p1, --p2)
+                    buff[p1] = buff[p2];
+                ++p2;
+                // put the separator
+                buff[p2++] = '\n';
+                buff[p2++] = ' ';
+                // copy the username
+                strncpy(buff + p2, username, strlen(username));
+                if (write(sockfd, buff, size) < 0)
+                {
+                    perror("write");
+                    return false;
+                }
+            } else {
+                if (write(sockfd, buff, st.st_size) < 0)
+                {
+                    perror("write");
+                    return false;
+                }
+
+            } 
         }
         else
         {
