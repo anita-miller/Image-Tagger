@@ -21,21 +21,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-// constants
-static char const *const HTTP_200_FORMAT = "HTTP/1.1 200 OK\r\n\
-Content-Type: text/html\r\n\
-Content-Length: %ld\r\n\r\n";
-
-static char const *const HTTP_404 = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n";
-static int const HTTP_404_LENGTH = 45;
-
-static const char *INTRO_PAGE = "html/1_intro.html";
-static const char *START_PAGE = "html/2_start.html";
-static const char *FIRSTURN_PAGE = "html/3_first_turn.html";
-static const char *ACCEPTED_PAGE = "html/4_accepted.html";
-static const char *DISCARDED_PAGE = "html/5_discarded.html";
-static const char *ENDGAME_PAGE = "html/6_endgame.html";
-static const char *GAMEOVER_PAGE = "html/7_gameover.html";
+#include "image-tagger.h"
 
 static int user1 = -1;
 static int user1_start = 0;
@@ -48,27 +34,6 @@ char user2_guesses[100][100];
 int number_guesses_user2 = 0;
 static const char *filePath;
 int gameover = 0;
-
-// represents the types of method
-typedef enum
-{
-    GET,
-    POST,
-    UNKNOWN
-} METHOD;
-
-typedef enum
-{
-    INTRO,
-    START,
-    FIRST,
-    ACCEPTED,
-    DISCARDED,
-    QUIT,
-    GAMEOVER,
-    NOTDEFINED,
-    EMPTY
-} Page;
 
 METHOD parseMethod(char *curr, METHOD method)
 {
@@ -145,26 +110,74 @@ void loadGETHtml(int n, int sockfd, char *buff, const char *pathname)
     close(filefd);
 }
 
-void addUserName(int sockfd, char *buff, char *username, size_t size)
+void addUserName(int sockfd, char *buff, char *username, long size)
 {
+    // move the trailing part backward
     int username_length = strlen(username);
     long added_length = username_length + 2;
-    if (username_length > 0)
+    int p1, p2;
+    for (p1 = size - 1, p2 = p1 - added_length; p1 >= size - 25; --p1, --p2)
+        buff[p1] = buff[p2];
+    ++p2;
+    // put the separator
+    buff[p2++] = '\n';
+    buff[p2++] = ' ';
+    // copy the username
+    strncpy(buff + p2, username, username_length);
+    if (write(sockfd, buff, size) < 0)
     {
-        // move the trailing part backward
-        int p1, p2;
-        for (p1 = size - 1, p2 = p1 - added_length; p1 >= size - 25; --p1, --p2)
-            buff[p1] = buff[p2];
-        ++p2;
-        // put the separator
-        buff[p2++] = ',';
-        buff[p2++] = ' ';
-        // copy the username
-        strncpy(buff + p2, username, username_length);
-        if (write(sockfd, buff, size) < 0)
+        perror("write");
+        return false;
+    }
+
+}
+
+void manage_GET_requests(int n, int sockfd, char* buff, Page page){
+    if (page == INTRO)
+    {
+        loadGETHtml(n, sockfd, buff, INTRO_PAGE);
+    }
+    else if (page == START)
+    {
+        if (sockfd == user1)
         {
-            perror("write");
+            user1_start = 1;
         }
+        else if (sockfd == user2)
+        {
+            user2_start = 1;
+        }
+
+        loadGETHtml(n, sockfd, buff, FIRSTURN_PAGE);
+    }
+}
+void manage_POST_requests(int n, int sockfd, char *buff, Page page)
+{
+    
+}
+
+void setup_up_users(int sockfd){
+    // setup the users
+    if ((user1 == -1) && (sockfd != user2))
+    {
+        user1 = sockfd;
+    }
+    else if ((user2 == -1) && (sockfd != user1))
+    {
+        user2 = sockfd;
+    }
+}
+void reset_users(int sockfd)
+{
+    if (sockfd == user1)
+    {
+        user1 = -1;
+        user1_start = 0;
+    }
+    else if (sockfd == user2)
+    {
+        user2 = -1;
+        user2_start = 0;
     }
 }
 static bool manage_http_request(int sockfd)
@@ -204,23 +217,7 @@ static bool manage_http_request(int sockfd)
         // assume the only valid request URI is "/" but it can be modified to accept more files
         if (method == GET)
         {
-            if (page == INTRO)
-            {
-                loadGETHtml(n, sockfd, buff, INTRO_PAGE);
-            }
-            else if (page == START)
-            {
-                if (sockfd == user1)
-                {
-                    user1_start = 1;
-                }
-                else if (sockfd == user2)
-                {
-                    user2_start = 1;
-                }
-
-                loadGETHtml(n, sockfd, buff, FIRSTURN_PAGE);
-            }
+            manage_GET_requests(n, sockfd, buff, page);
         }
 
         else if (method == POST)
@@ -228,15 +225,8 @@ static bool manage_http_request(int sockfd)
 
             char *username;
             long size;
-            // setup the users
-            if ((user1 == -1) && (sockfd != user2))
-            {
-                user1 = sockfd;
-            }
-            else if ((user2 == -1) && (sockfd != user1))
-            {
-                user2 = sockfd;
-            }
+
+            setup_up_users(sockfd);
 
             filePath = START_PAGE;
             struct stat st;
@@ -244,32 +234,24 @@ static bool manage_http_request(int sockfd)
             if (page == QUIT)
             {
                 filePath = GAMEOVER_PAGE;
-                stat(filePath, &st);
+                
                 // Reset User
-                if (sockfd == user1)
-                {
-                    user1 = -1;
-                    user1_start = 0;
-                }
-                else if (sockfd == user2)
-                {
-                    user2 = -1;
-                    user2_start = 0;
-                }
+                reset_users(sockfd);
+                stat(filePath, &st);
                 n = sprintf(buff, HTTP_200_FORMAT, st.st_size);
             }
 
             else if (page == FIRST)
             {
                 filePath = START_PAGE;
-                stat(filePath, &st);
+                
 
                 //parse the username
                 username = strstr(buff, "user=") + 5;
                 size = st.st_size + strlen(username) + 2;
-
+                stat(filePath, &st);
                 n = sprintf(buff, HTTP_200_FORMAT, size);
-                
+
             }
 
             else if (page == ACCEPTED)
@@ -389,31 +371,18 @@ static bool manage_http_request(int sockfd)
                 return false;
             }
             close(filefd);
-
-            if((strlen(username) > 0) && (strstr(buff, "user=") != NULL) ){
-                // move the trailing part backward
-                int p1, p2;
-                for (p1 = size - 1, p2 = p1 - (strlen(username)+2); p1 >= size - 25; --p1, --p2)
-                    buff[p1] = buff[p2];
-                ++p2;
-                // put the separator
-                buff[p2++] = '\n';
-                buff[p2++] = ' ';
-                // copy the username
-                strncpy(buff + p2, username, strlen(username));
-                if (write(sockfd, buff, size) < 0)
-                {
-                    perror("write");
-                    return false;
-                }
-            } else {
+            if (page == FIRST && strlen(username) > 0)
+            {
+                addUserName(sockfd, buff, username, size);
+            }
+            else
+            {
                 if (write(sockfd, buff, st.st_size) < 0)
                 {
                     perror("write");
                     return false;
                 }
-
-            } 
+            }
         }
         else
         {
