@@ -54,7 +54,12 @@ void loadPOSTHtml(int n, int sockfd, char *buff, const char *pathname);
 void loadGETHtml(int n, int sockfd, char *buff, const char *pathname);
 
 
-void addUserName(int sockfd, char *buff, char *username, size_t size);
+void addUserName(int sockfd, char *buff, char *username, long size);
+
+void manage_POST_requests(int n, int sockfd, char *buff, Page page); 
+void manage_POST_requests(int n, int sockfd, char *buff, Page page);
+
+void setup_up_users(int sockfd);
 
 static bool manage_http_request(int sockfd);
 
