@@ -37,10 +37,12 @@ typedef enum
     ACCEPTED,
     DISCARDED,
     QUIT,
-    GAMEOVER,
-    NOTDEFINED,
-    EMPTY
+    GAMEOVER
 } Page;
+
+int main(int argc, char *argv[]);
+
+static bool manage_http_request(int sockfd);
 
 //parsing method type from buffer
 METHOD parseMethod(char *curr, METHOD method);
@@ -50,17 +52,21 @@ Page parseCorrectHtml(char *temp, Page page);
 
 
 void loadPOSTHtml(int n, int sockfd, char *buff, const char *pathname);
-
 void loadGETHtml(int n, int sockfd, char *buff, const char *pathname);
 
 
 void addUserName(int sockfd, char *buff, char *username, long size);
 
-void manage_POST_requests(int n, int sockfd, char *buff, Page page); 
 void manage_POST_requests(int n, int sockfd, char *buff, Page page);
+void manage_GET_requests(int n, int sockfd, char *buff, Page page);
+
+void load_quit_page(int sockfd, struct stat st, char *buff);
+void load_first_turn_page(int sockfd, struct stat st, char *buff);
+void load_accepted_page(int sockfd, struct stat st, char *buff);
+void check_if_gusses_match(char *keyword, char user2_guesses, int number_guesses_user2, char user1_guesses, int number_guesses_user1); 
 
 void setup_up_users(int sockfd);
+void reset_users(int sockfd);
 
-static bool manage_http_request(int sockfd);
 
-int main(int argc, char * argv[]);
+
