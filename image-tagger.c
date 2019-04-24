@@ -171,45 +171,7 @@ static bool manage_http_request(int sockfd)
     }
     else if (method == POST)
     {
-        char *username;
-        long size;
-
-        setup_up_users(sockfd);
-
-        filePath = START_PAGE;
-        struct stat st;
-        // when Quit button is clicket, exits games
-        if (page == QUIT)
-        {
-            load_quit_page(sockfd, st, buff);
-        }
-        else if (page == FIRST)
-        {
-            load_first_turn_page(sockfd, st, buff);
-        }
-        else if (page == ACCEPTED)
-        {
-            load_accepted_page(sockfd, st, buff);
-        }
-
-        if (loadPOSTHtml (n, sockfd, buff, filePath)== false)
-        {
-            return false;
-        }
-
-        //adding username
-        if (page == FIRST && strlen(username) > 0)
-        {
-            addUserName(sockfd, buff, username, size);
-        }
-        else
-        {
-            if (write(sockfd, buff, st.st_size) < 0)
-            {
-                perror("write");
-                return false;
-            }
-        }
+        manage_POST_requests(n, sockfd, buff, page);
     }
     else
     {
