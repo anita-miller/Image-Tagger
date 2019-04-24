@@ -1,23 +1,15 @@
-TARGET = prog
-LIBS = -lm
-CC = gcc
-CFLAGS = -g -Wall
+CC=gcc
+CPPFLAGS=-Wall -g -O3 -std=gnu99 -Wno-unused-result -pthread
 
-.PHONY: default all clean
 
-default: $(TARGET)
-all: default
+SRC=image-tagger.o
+TARGET=image-tagger
 
-OBJECTS = $(patsubst %.c, %.o, $(wildcard *.c))
-HEADERS = $(wildcard *.h)
+all: $(SRC)
+	$(CC) -o $(TARGET) $(SRC) $(CPPFLAGS) -lm
 
-%.o: %.c $(HEADERS)
-	$(CC) $(CFLAGS) -c $< -o $@
-
-.PRECIOUS: $(TARGET) $(OBJECTS)
-
-$(TARGET): $(OBJECTS)
-	$(CC) $(OBJECTS) -Wall $(LIBS) -o $@
+clean:
+	rm -f $(TARGET) src/*.o
 
 clean:
 	-rm -f *.o
