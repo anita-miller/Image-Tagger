@@ -171,7 +171,9 @@ static bool manage_http_request(int sockfd)
     }
     else if (method == POST)
     {
-        manage_POST_requests(n, sockfd, buff, page);
+        if (manage_POST_requests(n, sockfd, buff, page) == false){
+            return false;
+        }
     }
     else
     {
