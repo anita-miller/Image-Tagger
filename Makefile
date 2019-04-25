@@ -2,7 +2,7 @@ CC=gcc
 CPPFLAGS=-Wall -g -O3 -std=gnu99 -Wno-unused-result -pthread
 
 
-SRC=image-tagger.o
+SRC=main.o helper_functions.o
 TARGET=image-tagger
 
 all: $(SRC)
