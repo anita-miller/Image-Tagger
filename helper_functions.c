@@ -215,7 +215,30 @@ int load_accepted_page(int n, int sockfd, char *buff)
         //if player 2 is connected too
         if (user2_start == 1)
         {
-            check_if_gusses_match(keyword, user1_guesses, number_guesses_user1, user2_guesses, number_guesses_user2);
+            filePath = ACCEPTED_PAGE;
+            strcpy(user1_guesses[number_guesses_user1], keyword);
+            printf("%s\n", user1_guesses[number_guesses_user1]);
+            number_guesses_user1++;
+
+            for (int i = 0; i < number_guesses_user2; i++)
+            {
+                if (strcmp(user2_guesses[i], keyword) == 0)
+                {
+                    gameover = 1;
+                    user1 = -1;
+                    user2 = -1;
+                    number_guesses_user1 = 0;
+                    number_guesses_user2 = 0;
+                    user1_start = 0;
+                    user2_start = 0;
+                    for (int i = 0; i < 100; i++)
+                    {
+                        memset(user1_guesses[i], '\0', 100);
+                        memset(user2_guesses[i], '\0', 100);
+                    }
+                    filePath = ENDGAME_PAGE;
+                }
+            }
         }
         else if (gameover == 1)
         {
@@ -232,7 +255,30 @@ int load_accepted_page(int n, int sockfd, char *buff)
         //if player 1 is connected too
         if (user1_start == 1)
         {
-            check_if_gusses_match(keyword, user2_guesses, number_guesses_user2, user1_guesses, number_guesses_user1);
+            filePath = ACCEPTED_PAGE;
+            strcpy(user2_guesses[number_guesses_user2], keyword);
+            printf("%s\n", user2_guesses[number_guesses_user2]);
+            number_guesses_user2++;
+
+            for (int i = 0; i < number_guesses_user1; i++)
+            {
+                if (strcmp(user1_guesses[i], keyword) == 0)
+                {
+                    gameover = 1;
+                    user1 = -1;
+                    user2 = -1;
+                    number_guesses_user1 = 0;
+                    number_guesses_user2 = 0;
+                    user1_start = 0;
+                    user2_start = 0;
+                    for (int i = 0; i < 100; i++)
+                    {
+                        memset(user1_guesses[i], '\0', 100);
+                        memset(user2_guesses[i], '\0', 100);
+                    }
+                    filePath = ENDGAME_PAGE;
+                }
+            }
         }
         else if (gameover == 1)
         {
@@ -248,34 +294,6 @@ int load_accepted_page(int n, int sockfd, char *buff)
     stat(filePath, &st);
     n = sprintf(buff, HTTP_200_FORMAT, st.st_size);
     return n;
-}
-
-void check_if_gusses_match(char *keyword, char user2_guesses[100][100], int number_guesses_user2, char user1_guesses[100][100], int number_guesses_user1)
-{
-    filePath = ACCEPTED_PAGE;
-    strcpy(user2_guesses[number_guesses_user2], keyword);
-    printf("%s\n", user2_guesses[number_guesses_user2]);
-    number_guesses_user2++;
-
-    for (int i = 0; i < number_guesses_user1; i++)
-    {
-        if (strcmp(user1_guesses[i], keyword) == 0)
-        {
-            gameover = 1;
-            user1 = -1;
-            user2 = -1;
-            number_guesses_user1 = 0;
-            number_guesses_user2 = 0;
-            user1_start = 0;
-            user2_start = 0;
-            for (int i = 0; i < 100; i++)
-            {
-                memset(user1_guesses[i], '\0', 100);
-                memset(user2_guesses[i], '\0', 100);
-            }
-            filePath = ENDGAME_PAGE;
-        }
-    }
 }
 
 void manage_GET_requests(int n, int sockfd, char *buff, Page page)

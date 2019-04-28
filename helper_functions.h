@@ -45,9 +45,6 @@ void loadPOSTHtml(int n, int sockfd, char *buff, const char *pathname);
 
 void loadGETHtml(int n, int sockfd, char *buff, const char *pathname);
 
-// check if the guess made by one player exists in the list of guesses made by other player
-void check_if_gusses_match(char *keyword, char user2_guesses[100][100], int number_guesses_user2, char user1_guesses[100][100], int number_guesses_user1);
-
 int load_quit_page(int n, int sockfd,char *buff);
 
 int load_start_page(int n, int sockfd, char *buff);
