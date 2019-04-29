@@ -148,7 +148,7 @@ int main(int argc, char *argv[])
                         // print out the IP and the socket number
                         char ip[INET_ADDRSTRLEN];
                         printf(
-                            "new connection from %s on socket %d\n",
+                            "image_tagger server is now running at IP : %s on port %d\n",
                             // convert to human readable string
                             inet_ntop(cliaddr.sin_family, &cliaddr.sin_addr, ip, INET_ADDRSTRLEN),
                             newsockfd);
